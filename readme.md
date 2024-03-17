@@ -11,7 +11,7 @@ Features
 --------
 
 *   **Encryption**: Ensures data confidentiality with AES encryption, securing your data at rest.
-*   **Ultra-efficient Compression**: uses LZW compression to make your persisten database really small yet blazingly fast
+*   **Ultra-efficient Compression**: uses LZW compression to make your persistent database really small yet blazingly fast
 *   **In-memory Search Index**: Offers fast retrieval capabilities through an in-memory search index, supporting both exact and fuzzy searches.
 *   **Extensible Data Model**: Flexible data structures allow for the storage and query of various data types, making it suitable for a wide range of applications.
 *   **Real-time Updates**: Utilizes WebSockets for real-time data updates, enhancing interactive user experiences.
