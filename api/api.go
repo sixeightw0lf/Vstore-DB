@@ -8,7 +8,7 @@ import (
 	"vstore/database"
 )
 
-// APIHandler holds a reference to the database
+// APIHandler struct holds a reference to the database
 type APIHandler struct {
 	db *database.Database
 }
@@ -18,17 +18,40 @@ func NewAPIHandler(db *database.Database) *APIHandler {
 	return &APIHandler{db: db}
 }
 
-// ServeHTTP handles the HTTP requests for CRUD operations
+// ServeHTTP handles the HTTP requests for CRUD operations and search
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost: // Create
 		h.handleCreate(w, r)
-	case http.MethodGet: // Read
-		h.handleRead(w, r)
+	case http.MethodGet: // Read or Search
+		query := r.URL.Query().Get("query")
+		if query != "" {
+			h.handleSearch(w, r, query) // Handle search if a query parameter is present
+		} else {
+			h.handleRead(w, r) // Handle regular read if no query parameter is present
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		fmt.Fprintf(w, "Unsupported method")
 	}
+}
+
+// handleSearch processes search requests
+func (h *APIHandler) handleSearch(w http.ResponseWriter, r *http.Request, query string) {
+	results, err := h.db.Search(query)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "Error searching: %v", err)
+		return
+	}
+	jsonResponse, err := json.Marshal(results)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "Error encoding search results: %v", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
 }
 
 // handleCreate processes create (insert) requests

@@ -5,30 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"sync"
 	"vstore/database/query"
 )
 
-// Database struct to include an index map
+// Database struct includes an index map and a search index for tokenized search
 type Database struct {
-	mu    sync.RWMutex
-	data  map[string]string
-	index map[string][]string // Simple indexing based on a key characteristic
-	file  string
+	mu          sync.RWMutex
+	data        map[string]string
+	index       map[string][]string        // Index based on a key characteristic
+	searchIndex map[string]map[string]bool // Inverted index for search: token -> map[key]bool
+	file        string
 }
 
 func NewDatabase(filename string) (*Database, error) {
 	db := &Database{
-		data:  make(map[string]string),
-		file:  filename,
-		index: make(map[string][]string), // Make sure to initialize the map
+		data:        make(map[string]string),
+		index:       make(map[string][]string),
+		searchIndex: make(map[string]map[string]bool),
+		file:        filename,
 	}
-
 	err := db.load()
 	if err != nil {
 		return nil, err
 	}
-
 	return db, nil
 }
 
@@ -40,13 +42,16 @@ func extractIndexKey(key string) string {
 	return ""
 }
 
+// Now include updateSearchIndex call in Set method
 func (db *Database) Set(key, value string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// Update the actual data
 	db.data[key] = value
-	indexKey := extractIndexKey(key)
-	db.index[indexKey] = append(db.index[indexKey], key)
+
+	// Update the search index
+	db.updateSearchIndex(key, value)
 
 	return db.save()
 }
@@ -164,4 +169,61 @@ func (db *Database) save() error {
 
 func (db *Database) Close() error {
 	return db.save()
+}
+
+// Tokenize a value into words (simple approach)
+func tokenize(value string) []string {
+	// This is a very basic tokenizer; consider using a more sophisticated approach for production
+	return strings.Fields(value)
+}
+
+// Update the search index when setting a new value
+func (db *Database) updateSearchIndex(key, value string) {
+	tokens := tokenize(value)
+	for _, token := range tokens {
+		if db.searchIndex[token] == nil {
+			db.searchIndex[token] = make(map[string]bool)
+		}
+		db.searchIndex[token][key] = true
+	}
+}
+
+// Search by keyword
+func (db *Database) SearchKeyword(keyword string) []string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	keys := make([]string, 0)
+	if entries, ok := db.searchIndex[keyword]; ok {
+		for key := range entries {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+func (db *Database) Search(query string) ([]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var results []string
+	isRegex := strings.Contains(query, ".*") // Simplistic check for regex pattern
+	if isRegex {
+		regex, err := regexp.Compile(query)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range db.data {
+			if regex.MatchString(value) {
+				results = append(results, fmt.Sprintf("%s: %s", key, value))
+			}
+		}
+	} else {
+		for key, value := range db.data {
+			if strings.Contains(value, query) {
+				results = append(results, fmt.Sprintf("%s: %s", key, value))
+			}
+		}
+	}
+	return results, nil
 }
