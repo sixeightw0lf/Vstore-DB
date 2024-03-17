@@ -58,7 +58,17 @@ def handle_get_record_by_id_and_pivot(id, pivot_key):
         emit('error', f'Request failed with status code {response.status_code}')
 
 @socketio.on('search_records')
-def handle_search_records(keyword, fuzzy):
+def handle_search_records(data):
+    # Assuming `data` is a dictionary that contains 'keyword' and 'fuzzy'.
+    keyword = data.get('keyword')
+    fuzzy = data.get('fuzzy', False)  # Default to False if fuzzy is not provided.
+    
+    # Debug print to help you see what's received
+    print("Received search_records with keyword: {} and fuzzy: {}".format(keyword, fuzzy))
+    
+    # Here you would add your search logic based on the keyword and fuzzy flag.
+    # For now, let's just log the inputs to confirm they're being received correctly.
+    print("Searching for records with keyword: '{}' and fuzzy search: {}".format(keyword, fuzzy))
     url = f'{API_URL}/search/{keyword}'
     if fuzzy:
         url += '/fuzzy'
@@ -74,6 +84,9 @@ def handle_search_records(keyword, fuzzy):
 
 @socketio.on('query_records')
 def handle_query_records(keywords, fuzzy):
+    print("search_records::::", keywords, fuzzy)
+    keywords = data.get('keyword')
+    fuzzy = data.get('fuzzy',False)
     url = f'{API_URL}/query/{"/".join(keywords)}'
     if fuzzy:
         url += '?fuzzy=true'
