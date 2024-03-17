@@ -1,3 +1,7 @@
+<img src="./splash.png">
+
+
+----
 VStore DB
 ===========================
 
@@ -57,7 +61,7 @@ Getting Started
 
 1.  **Clone the Repository**
 
-shCopy code
+sh
 
 `git clone <repository-url> cd VStore`
 
@@ -65,7 +69,7 @@ shCopy code
 
 Navigate to the Go directory and build the project:
 
-shCopy code
+sh
 
 `cd go go build ./vstore`
 
@@ -73,15 +77,15 @@ shCopy code
 
 In a new terminal, navigate to the Python directory and install dependencies:
 
-shCopy code
+sh
 
 `cd python pip install flask flask-socketio requests`
 
 Start the Flask application:
 
-shCopy code
+sh
 
-`python app.py`
+`python client/client.py`
 
 ### Usage
 
