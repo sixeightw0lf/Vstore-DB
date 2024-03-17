@@ -1,0 +1,209 @@
+package database
+
+import (
+	"encoding/gob"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+)
+
+// Database struct includes an index map and a search index for tokenized search
+type Database struct {
+	mu          sync.RWMutex
+	data        map[string]string
+	index       map[string][]string        // Index based on a key characteristic
+	searchIndex map[string]map[string]bool // Inverted index for search: token -> map[key]bool
+	file        string
+}
+
+func NewDatabase(filename string) (*Database, error) {
+	db := &Database{
+		data:        make(map[string]string),
+		index:       make(map[string][]string),
+		searchIndex: make(map[string]map[string]bool),
+		file:        filename,
+	}
+	err := db.load()
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func (db *Database) Set(key, value string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// Update the actual data
+	db.data[key] = value
+
+	// Update the search index
+	db.updateSearchIndex(key, value)
+
+	return db.save()
+}
+
+func (db *Database) Get(key string) (string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	value, exists := db.data[key]
+	if !exists {
+		return "", os.ErrNotExist
+	}
+
+	return value, nil
+}
+
+// New function for getting data by ID and checking if pivotKey exists in value
+func (db *Database) GetWithPivot(id, pivotKey string) (map[string]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	result := make(map[string]string)
+	for key, value := range db.data {
+		if key == id && strings.Contains(value, pivotKey) {
+			result[key] = value
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, os.ErrNotExist
+	}
+
+	return result, nil
+}
+
+func (db *Database) GetAll() map[string]string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	copy := make(map[string]string)
+	for k, v := range db.data {
+		copy[k] = v
+	}
+	return copy
+}
+
+func (db *Database) Search(keyword string) ([]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var results []string
+	for key, value := range db.data {
+		if strings.Contains(value, keyword) {
+			results = append(results, fmt.Sprintf("%s: %s", key, value))
+		}
+	}
+	return results, nil
+}
+
+// New function to perform a fuzzy search
+func (db *Database) SearchFuzzy(keyword string) ([]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var results []string
+	keywordLower := strings.ToLower(keyword)
+	for key, value := range db.data {
+		if strings.Contains(strings.ToLower(value), keywordLower) {
+			results = append(results, fmt.Sprintf("%s: %s", key, value))
+		}
+	}
+	return results, nil
+}
+
+// New function to query data with multiple terms
+func (db *Database) Query(terms []string) ([]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var results []string
+	for key, value := range db.data {
+		matchesAll := true
+		for _, term := range terms {
+			if !strings.Contains(value, term) {
+				matchesAll = false
+				break
+			}
+		}
+		if matchesAll {
+			results = append(results, fmt.Sprintf("%s: %s", key, value))
+		}
+	}
+	return results, nil
+}
+
+// New function for fuzzy query with multiple terms
+func (db *Database) QueryFuzzy(terms []string) ([]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var results []string
+	for key, value := range db.data {
+		valueLower := strings.ToLower(value)
+		matchesAll := true
+		for _, term := range terms {
+			termLower := strings.ToLower(term)
+			if !strings.Contains(valueLower, termLower) {
+				matchesAll = false
+				break
+			}
+		}
+		if matchesAll {
+			results = append(results, fmt.Sprintf("%s: %s", key, value))
+		}
+	}
+	return results, nil
+}
+
+func (db *Database) save() error {
+	file, err := os.Create(db.file)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(db.data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *Database) load() error {
+	file, err := os.Open(db.file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // No error if file doesn't exist
+		}
+		return err
+	}
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	err = decoder.Decode(&db.data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *Database) Close() error {
+	return db.save()
+}
+
+// Helper function to update the search index when setting a new value
+func (db *Database) updateSearchIndex(key, value string) {
+	tokens := strings.Fields(value)
+	for _, token := range tokens {
+		if db.searchIndex[token] == nil {
+			db.searchIndex[token] = make(map[string]bool)
+		}
+		db.searchIndex[token][key] = true
+	}
+}
